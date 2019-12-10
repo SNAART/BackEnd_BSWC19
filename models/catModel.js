@@ -1,67 +1,83 @@
-
 'use strict';
-const pool = require('../database/db');
-const promisePool = pool.promise();
+// catController
 
-const getAllCats = async () => {
-  try {
-    const [rows] = await promisePool.execute('SELECT wop_cat.*, wop_user.name as ownername FROM wop_cat JOIN wop_user ON wop_user.user_id = wop_cat.owner;');
-    return rows;
-  } catch (e) {
-    console.log('error', e.message);
-    return {error: 'error in database query'};
-  }
-};
+const catModel = require('../models/catModel');
+const resize = require('../utils/resize');
+const imageMeta = require('../utils/imageMeta');
 
-const getCat = async (params) => {
-  try {
-    const [rows] = await promisePool.execute(
-        'SELECT * FROM wop_cat WHERE cat_id = ?;',
-        params,
-    );
-    return rows;
-  } catch (e) {
-    console.log('error', e.message);
-    return {error: 'error in database query'};
-  }
+
+const cat_list_get = async (req, res) => {
+    const cats = await catModel.getAllCats();
+    res.json(cats);
 };
 
-const addCat = async (params) => {
-  try {
-    const [rows] = await promisePool.execute(
-        'INSERT INTO wop_cat (name, age, weight, owner, filename) VALUES (?, ?, ?, ?, ?);',
-        params
-    );
-    return rows;
-  } catch (e) {
-    console.log('error', e.message);
-  }
-};
-const updateCat = async (params) => {
-  try {
-    const [rows] = await promisePool.execute('UPDATE wop_cat SET name = ?, age = ?, weight = ?, owner = ? WHERE wop_cat.cat_id = ?',
-        params);
-    return rows;
-  } catch (e) {
-    console.log('error', e.message);
-    return {error: 'error in query'};
-  }
+const cat_create_post = async (req, res) => {
+    try{
+        // make thumbnail
+        await resize.makeThumbnail(
+            req.file.path,
+            `thumbnails/${req.file.filename}`,
+            {width: 160, height: 160}
+        );
+
+        // get coordinates
+        const coords = await imageMeta.getCoordinates(req.file.path);
+        console.log('coords', coords);
+
+        const params= [
+            req.body.name,
+            req.body.age,
+            req.body.weight,
+            req.body.owner,
+            req.file.filename,
+            coords,
+        ];
+        
+        const response= await catModel.addCat(params);
+        await res.json(response);
+                
+        // const cat = await catModel.getCat([response.insertId]);
+        // console.log('dong 40');
+        
+        // await res.json(cat);
+
+    }catch(e){
+        console.log('exif error');
+        res.status(400).json({message:'error'});
+    }
+    
 };
 
-const deleteCat = async (params) => {
-  try {
-    const [rows] = await promisePool.execute('DELETE FROM wop_cat WHERE cat_id = ?',
-        params);
-    return rows;
-  } catch (e) {
-    console.log('error', e.message);
-    return {error: 'error in query'};
-  }
+const cat_get = async (req, res) => {
+    const params= [req.params.id];
+    const [cat]= await catModel.getCat(params);
+    await res.json(cat);
 };
-module.exports = {
-  getAllCats,
-  getCat,
-  addCat,
-  updateCat,
-  deleteCat,
+
+const cat_update_put= async(req,res)=>{
+    
+    const params= [
+        req.body.name,
+        req.body.age,
+        req.body.weight,
+        req.body.owner,
+        req.body.id
+    ];
+
+    const response= await catModel.updateCat(params);
+    await res.json(response);
+};
+
+const cat_delete= async (req,res)=>{
+    const params= [req.params.id];
+    const cat= await catModel.deleteCat(params);
+    await res.json(cat);
+}
+
+module.exports ={
+    cat_list_get,
+    cat_get,
+    cat_create_post,
+    cat_update_put,
+    cat_delete
 };
